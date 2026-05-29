@@ -148,14 +148,18 @@ def _extract_sections(pdf_path: str) -> list[dict]:
     sections, cur_heading, cur_paras = [], None, []
     para_buffer = ""
 
-    def flush():
+    def flush(force: bool = False):
+        """Gộp block PDF thành một claim — chỉ tách khi có [n] cuối đoạn hoặc force."""
         nonlocal para_buffer
         raw = para_buffer.strip()
-        if raw:
-            citations = [int(x) for x in re.findall(r"\[(\d+)\]", raw)]
-            clean = re.sub(r"(\s*\[\d+\])+\s*$", "", raw).strip()
-            if clean:
-                cur_paras.append({"text": clean, "citations": citations})
+        if not raw:
+            return
+        if not force and not re.search(r"(\s*\[\d+\])+\s*$", raw):
+            return
+        citations = [int(x) for x in re.findall(r"\[(\d+)\]", raw)]
+        clean = re.sub(r"(\s*\[\d+\])+\s*$", "", raw).strip()
+        if clean:
+            cur_paras.append({"text": clean, "citations": citations})
         para_buffer = ""
 
     def _is_plausible_heading(text: str, is_heading_flag: bool) -> bool:
@@ -173,7 +177,7 @@ def _extract_sections(pdf_path: str) -> list[dict]:
         if is_footer(b["text"]):
             break
         if _is_plausible_heading(b["text"], b["is_heading"]):
-            flush()
+            flush(force=True)
             if cur_heading is not None:
                 sections.append({"heading": cur_heading, "paragraphs": cur_paras})
             cur_heading = b["text"].strip()
@@ -181,14 +185,39 @@ def _extract_sections(pdf_path: str) -> list[dict]:
             para_buffer = ""
         else:
             para_buffer += " " + b["text"]
-            # Flush sau mỗi block text — không chờ citation [n] ở cuối
-            flush()
+            flush(force=False)
 
-    flush()
+    flush(force=True)
     if cur_heading is not None and cur_paras:
-        sections.append({"heading": cur_heading, "paragraphs": cur_paras})
+        sections.append({"heading": cur_heading, "paragraphs": _merge_fragment_paragraphs(cur_paras)})
 
     return sections
+
+
+def _merge_fragment_paragraphs(paras: list[dict]) -> list[dict]:
+    """Gộp đoạn quá ngắn (do PDF tách block lỗi thời) với đoạn liền trước/sau."""
+    if not paras:
+        return paras
+    out: list[dict] = []
+    for p in paras:
+        text = (p.get("text") or "").strip()
+        if not text:
+            continue
+        if out and len(text) < 80:
+            prev = out[-1]
+            prev["text"] = f"{prev['text']} {text}".strip()
+            prev["citations"] = list(
+                dict.fromkeys((prev.get("citations") or []) + (p.get("citations") or []))
+            )
+        elif out and len(out[-1]["text"]) < 80:
+            prev = out[-1]
+            prev["text"] = f"{prev['text']} {text}".strip()
+            prev["citations"] = list(
+                dict.fromkeys((prev.get("citations") or []) + (p.get("citations") or []))
+            )
+        else:
+            out.append({"text": text, "citations": list(p.get("citations") or [])})
+    return out
 
 
 def _detect_domain(title: str, sections: list[dict]) -> str:

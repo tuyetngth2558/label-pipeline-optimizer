@@ -85,7 +85,7 @@ def extract_json(raw: str) -> dict:
     )
 
 
-def normalize_data(data: dict) -> dict:
+def normalize_data(data: dict, domain_key_hint: str = "") -> dict:
     """
     Post-process data từ Claude:
     - Normalize fact_check_status (underscore → space)
@@ -126,7 +126,9 @@ def normalize_data(data: dict) -> dict:
         except (TypeError, ValueError):
             art[field] = 0.0
 
-    data["article"] = apply_article_bands(normalize_article_domain(art))
+    data["article"] = apply_article_bands(
+        normalize_article_domain(art, domain_key_hint=domain_key_hint)
+    )
     return data
 
 

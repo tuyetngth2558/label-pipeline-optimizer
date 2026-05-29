@@ -124,18 +124,50 @@ def validate_article_domain(
     return issues
 
 
-def normalize_article_domain(article: dict) -> dict:
-    """Điền domain/sub_domain từ sub_domain_id nếu có trong registry."""
+_DEFAULT_SUB_BY_DOMAIN = {
+    "law": "law_03",  # Hành chính — phổ biến cho NĐ/TT/thủ tục
+    "med": "med_01",
+    "gov": "gov_04",
+    "fin": "fin_05",
+}
+
+
+def normalize_article_domain(article: dict, domain_key_hint: str = "") -> dict:
+    """Điền domain/sub_domain từ sub_domain_id; sửa ID bịa của AI nếu không có trong bảng."""
     art = dict(article)
     sid = (art.get("sub_domain_id") or "").strip()
     entry = get_entry(sid)
-    if not entry:
+    if entry:
+        art["sub_domain_id"] = entry["sub_domain_id"]
+        art["sub_domain"] = entry["sub_domain"]
+        art["domain"] = entry["domain"]
+        art["domain_key"] = entry["domain_key"]
         return art
 
-    art["sub_domain_id"] = entry["sub_domain_id"]
-    art["sub_domain"] = entry["sub_domain"]
-    art["domain"] = entry["domain"]
-    art["domain_key"] = entry["domain_key"]
+    reg = load_registry()
+    dk = (art.get("domain_key") or domain_key_hint or "law").strip().lower()
+    sub_name = (art.get("sub_domain") or "").strip().lower()
+
+    for e in reg["by_domain"].get(dk, []):
+        if sub_name and sub_name in e["sub_domain"].lower():
+            art.update({
+                "sub_domain_id": e["sub_domain_id"],
+                "sub_domain": e["sub_domain"],
+                "domain": e["domain"],
+                "domain_key": e["domain_key"],
+            })
+            return art
+
+    fallback_id = _DEFAULT_SUB_BY_DOMAIN.get(dk)
+    if fallback_id:
+        entry = get_entry(fallback_id)
+        if entry:
+            art.update({
+                "sub_domain_id": entry["sub_domain_id"],
+                "sub_domain": entry["sub_domain"],
+                "domain": entry["domain"],
+                "domain_key": entry["domain_key"],
+            })
     return art
 
 

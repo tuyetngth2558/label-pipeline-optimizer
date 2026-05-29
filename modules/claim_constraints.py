@@ -55,10 +55,16 @@ def apply_prelabel_output(claim: dict) -> dict:
     notes = re.sub(r"(?m)^SC=", "DRAFT_SC=", notes)
     notes = re.sub(r"(?m)^HR=", "DRAFT_HR=", notes)
     if "DRAFT_SC=" not in notes and c.get("source_coverage"):
-        sc = c.get("source_coverage", "")
+        try:
+            sc = f"{float(c.get('source_coverage', 0)):.2f}".rstrip("0").rstrip(".")
+        except (TypeError, ValueError):
+            sc = c.get("source_coverage", "")
         notes += f"\nDRAFT_SC={sc}: (AI gợi ý — intern xác nhận)"
     if "DRAFT_HR=" not in notes and c.get("hallucination_rate"):
-        hr = c.get("hallucination_rate", "")
+        try:
+            hr = f"{float(c.get('hallucination_rate', 0)):.2f}".rstrip("0").rstrip(".")
+        except (TypeError, ValueError):
+            hr = c.get("hallucination_rate", "")
         notes += f"\nDRAFT_HR={hr}: (AI gợi ý — intern xác nhận)"
 
     c["fact_check_status"] = PLACEHOLDER_G

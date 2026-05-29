@@ -952,7 +952,7 @@ class App:
                 )
 
             try:
-                data = normalize_data(data)
+                data = normalize_data(data, domain_key_hint=detected)
             except Exception as e:
                 raise PipelineError("Normalize", f"Lỗi normalize data: {e}")
 
