@@ -1,0 +1,10 @@
+outputs/
+chrome_profile/
+browser_profile/
+__pycache__/
+*.pyc
+.env
+debug_screenshot*.png
+debug_dom_send.html
+*.xlsx
+!template/
