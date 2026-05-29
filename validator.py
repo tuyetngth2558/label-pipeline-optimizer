@@ -14,11 +14,9 @@ from urllib.parse import urlparse
 
 import openpyxl
 
-from modules.claim_constraints import PLACEHOLDER_G
-
-VALID_STATUSES = {
-    "XAC NHAN", "LECH", "MAU THUAN", "OUTDATED", "KHONG TIM THAY", "BO QUA",
-}
+from modules.claim_constraints import PLACEHOLDER_G, split_urls
+from modules.domain_registry import validate_article_domain
+from modules.scoring_utils import VALID_STATUSES, normalize_fact_check_status
 NOTES_KEYS = ("SF=", "SC=", "HR=", "SQ=", "TXT=")
 NUM_COLS = 18
 
@@ -39,7 +37,19 @@ def validate_row(row_num: int, row: tuple, strict: bool = False) -> list[str]:
     if not vals[5]:
         return issues
 
-    status = str(vals[6] or "").strip().upper()
+    if vals[4]:
+        for msg in validate_article_domain(
+            "", str(vals[2] or ""), str(vals[3] or ""), str(vals[4] or "")
+        ):
+            issues.append(f"Claim #{claim_num} — Domain: {msg}")
+
+    raw_status = str(vals[6] or "").strip()
+    status, status_detail = normalize_fact_check_status(raw_status)
+    if status_detail and strict:
+        issues.append(
+            f"Claim #{claim_num} — Cột G: có giải thích dài trong status "
+            f"(chuyển sang Notes): '{raw_status[:50]}...'"
+        )
     url = str(vals[7] or "").strip()
     sc = vals[9]
     hr = vals[10]
@@ -57,14 +67,18 @@ def validate_row(row_num: int, row: tuple, strict: bool = False) -> list[str]:
     if PLACEHOLDER_G in str(vals[6] or "") and not strict:
         return issues  # pre-label file — chỉ warn khi --strict
 
-    if status and status not in VALID_STATUSES:
-        issues.append(f"Claim #{claim_num} — Cột G: status không hợp lệ '{status}'")
+    if status and status not in VALID_STATUSES and PLACEHOLDER_G not in raw_status:
+        issues.append(f"Claim #{claim_num} — Cột G: status không hợp lệ '{raw_status[:40]}'")
 
     if status != "BO QUA" and status and not url:
         issues.append(f"Claim #{claim_num} — Cột H: thiếu URL (status={status})")
 
-    if url and not _is_full_url(url):
-        issues.append(f"Claim #{claim_num} — Cột H: URL không đầy đủ (thiếu path)")
+    url_list = split_urls(url)
+    if url and not url_list:
+        issues.append(f"Claim #{claim_num} — Cột H: không parse được URL hợp lệ")
+    for u in url_list:
+        if not _is_full_url(u):
+            issues.append(f"Claim #{claim_num} — Cột H: URL không đầy đủ path: {u[:60]}")
 
     for label, val, col in (("SC", sc, "J"), ("HR", hr, "K")):
         try:

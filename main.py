@@ -21,7 +21,8 @@ from modules.claude_automation import run_annotation_with_retry
 from modules.response_parser import (
     extract_json, validate_schema, normalize_data, process_claims,
 )
-from modules.excel_writer    import append_rows, OUTPUT_PATH
+from modules.excel_writer    import append_rows, append_article_evaluation, OUTPUT_PATH
+from modules.domain_registry import validate_article_domain
 from modules.url_verifier    import verify_urls, format_verification_report
 from modules.claim_constraints import PLACEHOLDER_G
 
@@ -989,7 +990,13 @@ class App:
             self._log(f"  Domain   : {dn}")
             self._log(f"  Sub      : {sd} [{sdid}]")
             self._log(f"  Claims   : {len(cc)}")
-            self._log(f"  Rel={ca.get('rel','?')} | Comp={ca.get('comp','?')}")
+            self._log(f"  Rel={ca.get('rel','?')} ({ca.get('rel_band','')}) | "
+                      f"Comp={ca.get('comp','?')} ({ca.get('comp_band','')})")
+
+            for msg in validate_article_domain(
+                ca.get("domain_key", detected), dn, sd, sdid
+            ):
+                self._log(f"  ⚠ Domain: {msg}", "warn")
 
             cc = process_claims(
                 cc, mode, allowed_urls, url_verify_results, self._log,
@@ -1008,6 +1015,13 @@ class App:
             )
             try:
                 out = append_rows(rows)
+                append_article_evaluation(
+                    {**ca, "title": title, "domain": dn, "sub_domain": sd},
+                    annotator=ant,
+                    today=today,
+                    article_url=ref.get("article_url", "") if ref else "",
+                    log_fn=self._log,
+                )
             except PermissionError:
                 raise PipelineError(
                     "Ghi Excel",

@@ -1,4 +1,9 @@
 # Vivipedia Annotation Tool (`tool_data_labelling`)
+
+Pipeline pre-label + fact-check support cho dataset RAG Vivipedia (template v10).
+
+**Chi tiết:** [HUONG-DAN-SU-DUNG-VA-RUI-RO.md](HUONG-DAN-SU-DUNG-VA-RUI-RO.md) · [workflow.md](workflow.md) · [prd.md](prd.md)
+
 ---
 
 ## Yêu cầu
@@ -6,6 +11,7 @@
 - Python 3.10+
 - Google Chrome (desktop)
 - Tài khoản Claude.ai đã đăng nhập
+- File tham chiếu TA (khuyến nghị): `Domain-Subdomain List.csv` trong thư mục tool — để validate 69 sub-domain
 
 ---
 
@@ -36,17 +42,26 @@ python main.py
 ```
 
 1. Kéo thả **PDF bài viết** (trái) và **PDF Ref** (phải)
-2. Chỉnh Domain / Annotator ID
-3. Bấm **RUN ANNOTATION**
+2. Chọn **Chế độ:** Pre-label (Vòng 1, mặc định) hoặc Full
+3. Chỉnh Domain / Annotator ID
+4. Bấm **▶ RUN PRE-LABEL** (hoặc RUN FULL)
 
-Kết quả: `outputs/annotation_output.xlsx` (append mỗi lần chạy).
+**Kết quả:** `outputs/annotation_output.xlsx` (append mỗi lần chạy), gồm:
+
+| Sheet | Nội dung |
+|-------|----------|
+| **Annotation** | Claim từng dòng — cột A–O (template TA) + **P–R** (review tool) |
+| **Article Evaluation** | 1 dòng/bài — Rel, Comp, band, nhận xét 3–5 câu |
 
 ### Bước 3 — Intern fact-check (Vòng 2)
 
-Mở Excel, điền cột **G, H, J, K**, sửa Notes, cập nhật:
-- **P** Evidence Quote (trích từ URL thật)
+Mở Excel, điền cột **G, H, J, K**, sửa Notes (đủ `SF=` … `TXT=`), cập nhật:
+
+- **P** Evidence Quote (trích từ URL thật, ≤200 ký tự)
 - **Q** URL Load OK = `Y` nếu đã mở và xác nhận
-- **R** Intern Reviewed = `Y` (hoặc `Y ANT-01 2026-05-29`)
+- **R** Intern Reviewed = `Y` sau khi review xong claim
+
+**Cột G:** chỉ một trong 6 status — không ghi giải thích dài vào G (chi tiết → Notes).
 
 ### Bước 4 — Validate trước khi nộp
 
@@ -54,7 +69,7 @@ Mở Excel, điền cột **G, H, J, K**, sửa Notes, cập nhật:
 python validator.py -f outputs/annotation_output.xlsx --strict
 ```
 
-`--strict`: bắt buộc cột R, evidence khi `XAC NHAN`.
+`--strict`: bắt buộc cột R, evidence khi `XAC NHAN`, không placeholder G, kiểm tra domain ID.
 
 ---
 
@@ -62,20 +77,29 @@ python validator.py -f outputs/annotation_output.xlsx --strict
 
 ```
 tool_data_labelling/
-├── main.py                 # GUI chính
-├── login_claude.py         # Chrome CDP port 9222
-├── validator.py            # Pre-submit validator (CLI)
-├── prompt.md               # System prompt / rubric (Full mode)
+├── main.py
+├── login_claude.py
+├── validator.py
+├── notes_formatter_cli.py
+├── prompt.md                 # Rubric + JSON schema (Full mode)
+├── rule_prelabel.md          # Prompt Vòng 1
 ├── requirements.txt
 ├── CHANGELOG.md
-├── outputs/                # Excel kết quả (gitignored)
+├── HUONG-DAN-SU-DUNG-VA-RUI-RO.md
+├── workflow.md
+├── prd.md
+├── outputs/                  # gitignored
 └── modules/
-    ├── pdf_parser.py       # Trích claim từ PDF (flush mỗi block)
-    ├── ref_parser.py       # URL từ Ref PDF + check_url_coverage
+    ├── pdf_parser.py
+    ├── ref_parser.py
+    ├── url_verifier.py
+    ├── domain_registry.py    # 69 sub-domain từ CSV TA
+    ├── scoring_utils.py      # Band điểm, chuẩn hóa status G
     ├── prompt_builder.py
     ├── claude_automation.py
-    ├── response_parser.py  # JSON + chuẩn hóa Notes
-    ├── notes_formatter.py  # Format SF=/SC=/HR=/...
+    ├── response_parser.py
+    ├── claim_constraints.py
+    ├── notes_formatter.py
     └── excel_writer.py
 ```
 
@@ -84,32 +108,32 @@ tool_data_labelling/
 ## Pipeline
 
 ```
-PDF Bài viết → pdf_parser → sections/claims
+PDF Bài viết → pdf_parser → sections/claims + domain hint
 PDF Ref      → ref_parser → URLs (+ coverage check)
                           ↓
-              prompt_builder → prompts
+              url_verifier → load_ok / page_type
+                          ↓
+              prompt_builder (rule_prelabel.md | prompt.md)
                           ↓
             claude_automation → JSON
                           ↓
-            response_parser (+ notes_formatter)
+     response_parser (+ domain_registry, scoring_utils, notes_formatter)
                           ↓
-              excel_writer → annotation_output.xlsx
+     excel_writer → Annotation (A–R) + Article Evaluation
 ```
 
 ---
 
-## Cột Excel (A–R)
+## Cột Excel — Annotation (A–R)
 
 | Cột | Nội dung | Nguồn |
 |-----|----------|-------|
 | A–F | STT, Title, Domain, Sub-domain, ID, Claim | PDF + Claude |
 | G–H | Fact-check Status, URL | **Intern** (pre-label: placeholder) |
 | I–L | SF, SC, HR, SQ | AI + intern |
-| M | Notes | AI draft (`DRAFT_SC`/`DRAFT_HR` ở pre-label) |
+| M | Notes (5 dòng, gồm `TXT=`) | AI draft + intern |
 | N–O | Annotator ID, Date | UI |
-| **P** | Evidence Quote | Script + intern |
-| **Q** | URL Load OK (Y/N) | `url_verifier` + intern |
-| **R** | Intern Reviewed | `N` → `Y` sau review |
+| **P–R** | Evidence, URL Load OK, Intern Reviewed | Script + intern |
 
 **6 trạng thái G:** XAC NHAN, LECH, MAU THUAN, OUTDATED, KHONG TIM THAY, BO QUA.
 
@@ -119,9 +143,9 @@ PDF Ref      → ref_parser → URLs (+ coverage check)
 
 | Script | Mô tả |
 |--------|-------|
-| `python notes_formatter.py` | (module) — dùng trong pipeline |
-| `python validator.py -f file.xlsx --strict` | Kiểm tra trước nộp (sau intern review) |
-| `python test_modules.py` | Test nhanh parser (cần `data/*.pdf`) |
+| `python validator.py -f file.xlsx --strict` | Kiểm tra trước nộp |
+| `python notes_formatter_cli.py` | Format Notes thủ công |
+| `python test_modules.py` | Test parser (cần `data/*.pdf`) |
 
 ---
 
@@ -131,9 +155,6 @@ PDF Ref      → ref_parser → URLs (+ coverage check)
 |-----|------------|
 | Port 9222 | Chạy lại `login_claude.py` |
 | 0 claims | PDF scan ảnh / không có text layer |
-| Claim lệch script vs Claude | Xem log cảnh báo từng dòng |
+| Claim lệch script vs Claude | Pipeline dừng — không ghi Excel |
 | PermissionError Excel | Đóng file Excel đang mở |
-
-
----
-
+| Domain warning trong log | Sửa `sub_domain_id` theo bảng Domain TA |

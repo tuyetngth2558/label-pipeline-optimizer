@@ -86,7 +86,7 @@ Xây dựng pipeline **semi-automation** giúp intern:
 1. Intern lưu PDF bài viết + PDF Ref từ Vivipedia platform.
 2. Chạy `login_claude.py` → mở Chrome CDP.
 3. Mở GUI → kéo 2 PDF → chọn **Pre-label** → RUN.
-4. Tool parse claim, verify URL, gửi Claude, ghi Excel 18 cột.
+4. Tool parse claim, verify URL, gửi Claude, ghi Excel (Annotation A–R + Article Evaluation).
 5. Intern fact-check từng claim → điền G/H/J/K, P/Q/R.
 6. Chạy `validator.py --strict` → nộp batch.
 
@@ -215,6 +215,8 @@ Xây dựng pipeline **semi-automation** giúp intern:
 | FR-06.6 | Gắn `evidence_quote`, `url_load_ok`, `intern_reviewed = N` | P0 |
 | FR-06.7 | **Chặn ghi Excel** nếu số claim Claude ≠ script | P0 |
 | FR-06.8 | Chuẩn hóa Notes (`notes_formatter`) khi thiếu key | P1 |
+| FR-06.9 | Chuẩn hóa status G (tách `LECH — ...` → G + Notes) | P1 |
+| FR-06.10 | `normalize_article_domain` + `apply_article_bands` từ registry/scoring | P1 |
 
 ## FR-07 — Ghi Excel
 
@@ -224,6 +226,8 @@ Xây dựng pipeline **semi-automation** giúp intern:
 | FR-07.2 | **18 cột A–R** (thêm P Evidence, Q URL Load, R Intern Reviewed) | P0 |
 | FR-07.3 | Append mode — STT tự tăng; không ghi đè dòng có data cột F | P0 |
 | FR-07.4 | PermissionError → lưu file backup timestamp | P1 |
+| FR-07.5 | Sheet **Article Evaluation** — Rel/Comp, band, lý do 3–5 câu / bài | P0 |
+| FR-07.6 | Nâng cấp file Excel cũ 15 cột → 18 cột | P1 |
 
 ## FR-08 — Pre-Submit Validator
 
@@ -234,6 +238,9 @@ Xây dựng pipeline **semi-automation** giúp intern:
 | FR-08.3 | **`--strict`:** cấm placeholder G; bắt buộc R = Y | P0 |
 | FR-08.4 | **`--strict`:** XAC NHAN → bắt buộc P (evidence) + Q = Y | P0 |
 | FR-08.5 | Logic cảnh báo: XAC NHAN + HR thấp; LECH + H trống | P1 |
+| FR-08.6 | Validate `sub_domain_id` + tên domain/sub-domain khớp registry | P1 |
+| FR-08.7 | **`--strict`:** cảnh báo giải thích dài trong cột G (chỉ 6 status) | P1 |
+| FR-08.8 | Kiểm tra từng URL khi cột H có nhiều dòng | P1 |
 
 ## FR-09 — Notes Formatter (CLI)
 
@@ -275,6 +282,21 @@ Xây dựng pipeline **semi-automation** giúp intern:
 | P | Evidence Quote | Draft | **Intern xác nhận** |
 | Q | URL Load OK | Script Y/N | Intern xác nhận |
 | R | Intern Reviewed | `N` | **`Y` bắt buộc trước nộp** |
+
+> Cột **A–O** khớp template Vivipedia v10 (nộp TA). **P–R** là mở rộng tool — bắt buộc nội bộ qua `validator --strict`.
+
+## 5.1b Excel — Sheet Article Evaluation
+
+| Cột | Nội dung |
+|-----|----------|
+| Tên bài, Domain, Sub-domain | Từ article JSON |
+| Rel, Rel Band | Holistic — trả lời đúng tiêu đề |
+| Nhận xét Relevance | 3–5 câu |
+| Comp, Comp Band | Holistic — bao phủ khía cạnh |
+| Nhận xét Completeness | 3–5 câu |
+| Annotator ID, Ngày | UI / auto |
+
+Band tự tính (`Excellent` … `Block`) nếu Claude thiếu `rel_band` / `comp_band`.
 
 ## 5.2 Trạng thái Fact-check (cột G)
 
@@ -421,9 +443,13 @@ label-pipeline-optimizer/
     ├── claude_automation.py
     ├── response_parser.py
     ├── claim_constraints.py
+    ├── domain_registry.py
+    ├── scoring_utils.py
     ├── notes_formatter.py
     └── excel_writer.py
 ```
+
+**Tham chiếu TA (không bắt buộc commit):** export CSV Domain list, Scoring Guide, Annotation mẫu — dùng cho `domain_registry` và căn `prompt.md`.
 
 ---
 
@@ -435,8 +461,9 @@ label-pipeline-optimizer/
 - [x] Parse claim + URL
 - [x] URL verifier độc lập
 - [x] Claude automation (Pre-label + Full)
-- [x] Excel 18 cột append
-- [x] Validator + `--strict`
+- [x] Excel 18 cột append + sheet Article Evaluation
+- [x] Validator + `--strict` (+ domain / status G)
+- [x] `domain_registry` + `scoring_utils`
 - [x] Notes formatter
 - [x] Block ghi Excel khi claim lệch
 
@@ -465,7 +492,7 @@ label-pipeline-optimizer/
 
 ## v1.0 — MVP (hiện tại)
 
-Pre-label, url_verifier, validator strict, Excel A–R, GUI.
+Pre-label, url_verifier, validator strict, Excel A–R + Article Evaluation, `prompt.md` TA v13.5, GUI.
 
 ## v1.1 — Cải thiện chất lượng
 
@@ -499,3 +526,4 @@ Pre-label, url_verifier, validator strict, Excel A–R, GUI.
 ---
 
 *PRD v1.0 — Label Pipeline Optimizer — Vivipedia Annotation VSF*
+*Tham khảo file kết quả .xlsx*

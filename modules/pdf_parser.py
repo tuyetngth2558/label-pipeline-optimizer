@@ -45,7 +45,22 @@ _DOMAIN_KEYWORDS = {
     "fin": ["tài chính","ngân hàng","lãi suất","đầu tư","chứng khoán",
             "cổ phiếu","tín dụng","vay","bảo hiểm","kinh tế vĩ mô"],
     "gov": ["chính phủ","bộ","ủy ban","hội đồng nhân dân","chính trị",
-            "ngoại giao","quan hệ quốc tế"],
+            "ngoại giao","quan hệ quốc tế","thủ tục hành chính","công dân"],
+    "edu": ["giáo dục","học sinh","sinh viên","đại học","trường học",
+            "chương trình","thi cử","hướng nghiệp","sư phạm"],
+    "sci": ["khoa học","công nghệ","phần mềm","lập trình","ai ","trí tuệ nhân tạo",
+            "dữ liệu","máy tính","kỹ thuật","vũ trụ"],
+    "biz": ["kinh doanh","quản trị","marketing","nhân sự","khởi nghiệp",
+            "dự án","doanh nghiệp","bán hàng"],
+    "cul": ["văn hóa","phong tục","tín ngưỡng","văn học","nghệ thuật",
+            "tôn giáo","triết học","dân tộc"],
+    "his": ["lịch sử","địa lý","di tích","di sản","cổ vật","triều đại"],
+    "re":  ["bất động sản","nhà đất","quy hoạch","xây dựng","công trình",
+            "hạ tầng","nội thất","kiến trúc"],
+    "env": ["môi trường","khí hậu","năng lượng","ô nhiễm","sinh thái",
+            "tài nguyên","rác thải","biodiversity"],
+    "ent": ["thể thao","bóng đá","điện ảnh","âm nhạc","game","esports",
+            "giải trí","ca sĩ"],
 }
 
 
@@ -180,11 +195,11 @@ def _detect_domain(title: str, sections: list[dict]) -> str:
     text = title.lower()
     for sec in sections[:5]:
         text += " " + sec["heading"].lower()
-    scores = {dk: 0 for dk in _DOMAIN_KEYWORDS}
+    scores = {dk: 0 for dk in DOMAIN_MAP}
     for dk, keywords in _DOMAIN_KEYWORDS.items():
         for kw in keywords:
             if kw in text:
-                scores[dk] += 1
+                scores[dk] = scores.get(dk, 0) + 1
     best = max(scores, key=scores.get)
     return best if scores[best] > 0 else "law"
 

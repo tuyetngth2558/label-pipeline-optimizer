@@ -11,8 +11,9 @@
 - Trích claim từ PDF  
 - Trích URL từ Ref PDF  
 - Gửi prompt + URL cho Claude  
-- Ghi Excel chuẩn (không paste tay)  
+- Ghi Excel chuẩn (không paste tay) — sheet **Annotation** (18 cột) + **Article Evaluation** (Rel/Comp)  
 - Pre-label SF/SQ/TXT + gợi ý draft SC/HR  
+- Validate `sub_domain_id` theo bảng 69 sub-domain (file tham chiếu Vivipedia TA v13.5)  
 
 Intern vẫn làm **đúng phần mục 2.2 onboarding**: điền **G, H, J, K** và cập nhật **Notes SC/HR** — nhưng bắt đầu từ file đã có sẵn khung, không từ file trống.
 
@@ -25,7 +26,7 @@ Intern vẫn làm **đúng phần mục 2.2 onboarding**: điền **G, H, J, K**
 | Bước onboarding | Thủ công (báo cáo) | Với `tool_data_labelling` |
 |-----------------|-------------------|---------------------------|
 | **1** Nhận bài → PDF | Intern lưu PDF | Giữ nguyên — kéo PDF vào GUI |
-| **2** Chuẩn bị prompt + template | Mở nhiều file | Tool tự load `rule_prelabel.md`, tạo Excel |
+| **2** Chuẩn bị prompt + template | Mở nhiều file | Tool load `rule_prelabel.md` (Pre-label) hoặc `prompt.md` (Full) — rubric v10 khớp TA 13.5 |
 | **3** Extract URL (`pdf_url_extractor`) | Chạy script riêng | **Tự động** trong pipeline + verify URL |
 | **4** Gửi AI (upload prompt + PDF + URL) | Thao tác tay ChatGPT/Claude | **Một nút RUN PRE-LABEL** |
 | **5** AI xử lý 3–6 phút | Chờ + tải .xlsx | Chờ trong GUI, log từng stage |
@@ -41,7 +42,9 @@ Intern vẫn làm **đúng phần mục 2.2 onboarding**: điền **G, H, J, K**
 | **4.1** Fact-check tốn 15–20 phút/claim | Bớt setup; có SF/SQ/TXT + `DRAFT_SC`/`DRAFT_HR` làm baseline; intern tập trung mở URL và chốt G/H/J/K |
 | **4.2** Merge Excel dễ lệch | Không còn bước paste; **chặn ghi file** nếu số claim script ≠ Claude |
 | **4.3** SC/HR = 0.00, không baseline | Pre-label có draft trong Notes; cột P (Evidence) gợi ý đoạn nguồn |
-| **4.4** Format Notes dễ sai | `notes_formatter` chuẩn hóa; validator báo thiếu `SC=`/`HR=` |
+| **4.4** Format Notes dễ sai | `notes_formatter` chuẩn hóa **5 dòng** `SF=`/`SC=`/`HR=`/`SQ=`/`TXT=`; validator báo thiếu key |
+| **4.7** Sub-domain / domain sai ID | AI chọn nhầm `law_03` vs tên hiển thị | `domain_registry` + cảnh báo khi `sub_domain_id` lệch bảng |
+| **4.8** Rel/Comp chỉ trong đầu | Thiếu sheet Article Evaluation | Tool ghi thêm sheet **Article Evaluation** (Rel, band, lý do 3–5 câu) |
 | **4.5** Không phản hồi sớm | `validator.py` báo lỗi **ngay sau khi làm xong**, trước QA |
 | **4.6** URL index/404 không ổn định | `url_verifier` báo `document` / `index` / `error` trước khi intern mở tay |
 
@@ -96,7 +99,11 @@ python main.py
 2. Chọn **Chế độ: Pre-label (Vòng 1)**  
 3. Điền **Annotator ID** (vd. `ANT-01`)  
 4. Bấm **▶ RUN PRE-LABEL**  
-5. Kết quả: `outputs/annotation_output.xlsx`
+5. Kết quả: `outputs/annotation_output.xlsx` gồm:
+   - **Annotation** — claim từng dòng (cột A–O theo template v10; **P–R** là cột review của tool)
+   - **Article Evaluation** — 1 dòng/bài: Rel, Rel Band, nhận xét; Comp, Comp Band, nhận xét (band tự tính nếu AI thiếu)
+
+> File tham chiếu TA (Domain list, Scoring Guide, …) nên giữ trong thư mục tool để `domain_registry` load đúng 69 sub-domain.
 
 ### Bước 3 — Intern fact-check (Vòng 2)
 
@@ -104,10 +111,11 @@ Mở Excel, **từng claim**:
 
 | Cột | Việc cần làm |
 |-----|--------------|
-| **G** | Thay placeholder → 1 trong 6 status (XAC NHAN, LECH, …) |
-| **H** | URL đầy đủ (ưu tiên nguồn domain — mục 2.3 onboarding) |
+| **G** | Thay placeholder → **đúng 1** trong 6 status: `XAC NHAN`, `LECH`, `MAU THUAN`, `OUTDATED`, `KHONG TIM THAY`, `BO QUA` — **không** ghi giải thích dài vào G (chi tiết → cột M Notes) |
+| **H** | URL đầy đủ từ Ref; nhiều URL → **mỗi URL một dòng** trong cùng ô |
 | **J, K** | SC, HR (HR thang đảo ngược — mục 2.2 onboarding) |
-| **M** | Sửa `DRAFT_SC=` → `SC=`, `DRAFT_HR=` → `HR=`; giữ SF/SQ/TXT |
+| **M** | Sửa `DRAFT_SC=` → `SC=`, `DRAFT_HR=` → `HR=`; giữ SF/SQ; đủ **TXT=** (vd. `TXT=OK: Không có lỗi`) |
+| **C, D, E** | Kiểm tra Domain / Sub-domain / `sub_domain_id` khớp bảng (tool cảnh báo nếu lệch) |
 | **P** | Trích dẫn ngắn từ URL thật (≤200 ký tự) |
 | **Q** | `Y` nếu đã mở URL và xác nhận load được; `N` nếu 404/block |
 | **R** | Đặt `Y` (hoặc `Y ANT-01 2026-05-29`) khi **đã review xong claim đó** |
@@ -117,6 +125,7 @@ Mở Excel, **từng claim**:
 - [ ] 100% claim có `R = Y`  
 - [ ] Mọi `XAC NHAN` đã mở URL cột H  
 - [ ] Claim pháp luật/y tế khó — đọc kỹ case SC index (như bài ODA mục 3.2 onboarding)
+- [ ] Sheet **Article Evaluation**: Rel/Comp và nhận xét đã khớp nội dung bài (intern có thể sửa tay sau Pre-label)
 
 ### Bước 4 — Validate trước nộp
 
@@ -143,7 +152,7 @@ Lưu file, compile batch, báo Slack — theo hướng dẫn team.
 | **SC cao + trang index** | Giống case ODA: nguồn chỉ là danh mục, SC phải hạ xuống ~0.25 | Cao (law) |
 | **HR hiểu ngược** | HR cao = an toàn; HR thấp = nguy cơ — dễ nhầm với metric thường | Trung bình |
 
-**Tool không tự phát hiện sai nội dung** — chỉ phát hiện lỗi format, placeholder, URL ngoài Ref, claim lệch.
+**Tool không tự phát hiện sai nội dung** — chỉ phát hiện lỗi format, placeholder, URL ngoài Ref, claim lệch, domain/sub-domain ID, status G không chuẩn (kể cả khi `--strict` báo giải thích dài trong cột G).
 
 ### 4.2 Rủi ro kỹ thuật
 
@@ -185,6 +194,10 @@ Lưu file, compile batch, báo Slack — theo hướng dẫn team.
 | Validator fail cột R | Chưa đặt Intern Reviewed = Y | Tick review từng claim đã fact-check |
 | Validator fail Evidence (P) với XAC NHAN | Thiếu trích dẫn URL | Copy đoạn ngắn từ trang nguồn vào cột P |
 | SC/HR = 0.00 khi strict | Chưa điền J/K | Điền điểm sau khi đọc nguồn |
+| Validator fail Notes thiếu `TXT=` | Chỉ 4 dòng SF/SC/HR/SQ | Thêm dòng `TXT=OK: ...` hoặc `TXT=LỖI: ...` |
+| Validator fail Domain | `sub_domain_id` sai hoặc lệch tên | Tra bảng Domain trong template / file `Domain-Subdomain List.csv` |
+| `--strict` báo cột G có text dài | Ghi `LECH — Điều 13...` vào G | Chỉ để `LECH` ở G; phần giải thích chuyển sang Notes |
+| Claude trả status dài trong JSON | Full mode | Tool tự tách status → G, chi tiết → đầu Notes — intern vẫn nên rà lại |
 
 ### 5.2 Khi nghi ngờ output AI
 
@@ -224,15 +237,30 @@ Làm **5 bước kiểm tra claim**:
 
 ## 7. Cột Excel — intern cần nhớ
 
-| Cột | Sau Pre-label | Sau intern (nộp) |
-|-----|---------------|------------------|
-| G | `[INTERN: chưa fact-check]` | Status thật |
-| H | Trống | URL đầy đủ |
-| J, K | 0 | Điểm SC, HR |
-| M | Có `DRAFT_SC`/`DRAFT_HR` | `SC=`/`HR=` chính thức |
-| P | Draft (nếu có) | Trích dẫn URL |
-| Q | Y/N từ script | Intern xác nhận lại |
-| R | `N` | **`Y`** (bắt buộc với `--strict`) |
+### Sheet Annotation
+
+| Cột | Tên | Sau Pre-label | Sau intern (nộp) |
+|-----|-----|---------------|------------------|
+| A–F | Identity + Claim | Điền tự động | Claim nguyên văn từ PDF |
+| G | Fact-check Status | `[INTERN: chưa fact-check]` | Một trong 6 status (không kèm giải thích dài) |
+| H | Fact-check Source URL | Trống | URL Ref; nhiều URL xuống dòng |
+| I–L | SF, SC, HR, SQ | SF/SQ có; J/K = 0 | SC, HR sau fact-check |
+| M | Annotator Notes | Có `DRAFT_SC`/`DRAFT_HR` | Đủ 5 dòng `SF=` … `TXT=` |
+| N–O | Annotator ID, Date | AUTO + ngày | Giữ hoặc sửa ID |
+| **P–R** | **Review (tool)** | Evidence draft, Q từ script | P trích URL; Q xác nhận load; **R = Y** |
+
+> **A–O** = template Vivipedia v10 (nộp TA). **P–R** = cột mở rộng của tool để chứng minh review — không có trên file TA gốc nhưng bắt buộc trước nộp nội bộ (`--strict`).
+
+### Sheet Article Evaluation (1 dòng / bài)
+
+| Cột | Nội dung |
+|-----|----------|
+| Rel, Rel Band | Điểm + band (Excellent … Block) — trả lời đúng tiêu đề? |
+| Nhận xét Relevance | 3–5 câu |
+| Comp, Comp Band | Điểm + band — bao phủ đủ khía cạnh? |
+| Nhận xét Completeness | 3–5 câu, nêu phần thiếu |
+
+Intern có thể **sửa tay** sheet này sau Pre-label nếu AI chấm Rel/Comp chưa đúng.
 
 ---
 
@@ -257,6 +285,8 @@ python notes_formatter_cli.py
 **`tool_data_labelling` tối ưu so với onboarding** bằng cách:
 
 - Gom bước 2–6 (extract, prompt, AI, merge Excel) vào một pipeline có kiểm soát.  
+- Rubric `prompt.md` / `rule_prelabel.md` căn theo **Vivipedia TA v13.5** (69 sub-domain, Scoring Guide, Notes 5 dòng).  
+- Ghi **Annotation + Article Evaluation**; validate domain ID và format status/Notes.  
 - Cung cấp draft SF/SQ/Notes và verify URL sớm.  
 - Thêm validator và cột P/Q/R để intern **chứng minh đã review**, không chỉ “điền cho đủ cột”.  
 

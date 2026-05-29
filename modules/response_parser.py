@@ -3,26 +3,18 @@ import re
 
 from modules.notes_formatter import normalize_notes_block, notes_has_required_keys
 from modules.claim_constraints import (
+    PLACEHOLDER_G,
     apply_prelabel_output,
     enrich_evidence_fields,
     sanitize_claim_urls,
     validate_claim_for_export,
 )
 from modules.prompt_builder import MODE_PRELABEL, MODE_FULL
-
-# Map normalize fact_check_status — underscore → space, typo fix
-_STATUS_NORMALIZE = {
-    "XAC_NHAN": "XAC NHAN",
-    "MAU_THUAN": "MAU THUAN",
-    "KHONG_TIM_THAY": "KHONG TIM THAY",
-    "BO_QUA": "BO QUA",
-    "XAC NHAN": "XAC NHAN",
-    "LECH": "LECH",
-    "MAU THUAN": "MAU THUAN",
-    "OUTDATED": "OUTDATED",
-    "KHONG TIM THAY": "KHONG TIM THAY",
-    "BO QUA": "BO QUA",
-}
+from modules.domain_registry import normalize_article_domain
+from modules.scoring_utils import (
+    apply_article_bands,
+    normalize_fact_check_status,
+)
 
 
 def extract_json(raw: str) -> dict:
@@ -100,9 +92,17 @@ def normalize_data(data: dict) -> dict:
     - Clean source URLs (remove hallucinated paths nếu cần)
     """
     for claim in data.get("claims", []):
-        # Normalize status
-        raw_status = str(claim.get("fact_check_status", "")).strip().upper()
-        claim["fact_check_status"] = _STATUS_NORMALIZE.get(raw_status, raw_status)
+        raw_status = str(claim.get("fact_check_status", "")).strip()
+        status, status_detail = normalize_fact_check_status(raw_status)
+        if status and PLACEHOLDER_G not in raw_status:
+            claim["fact_check_status"] = status
+            if status_detail:
+                notes = claim.get("notes", "") or ""
+                if status_detail not in notes:
+                    prefix = f"[{status} chi tiết] "
+                    claim["notes"] = (prefix + status_detail + "\n" + notes).strip()
+        elif raw_status:
+            claim["fact_check_status"] = raw_status
 
         # Ensure numeric fields are float
         for field in ["source_fidelity", "source_coverage", "hallucination_rate", "source_quality"]:
@@ -118,7 +118,6 @@ def normalize_data(data: dict) -> dict:
         elif not notes:
             claim["notes"] = normalize_notes_block("", claim)
 
-    # Article level float fields
     art = data.get("article", {})
     for field in ["rel", "comp"]:
         val = art.get(field, 0)
@@ -127,6 +126,7 @@ def normalize_data(data: dict) -> dict:
         except (TypeError, ValueError):
             art[field] = 0.0
 
+    data["article"] = apply_article_bands(normalize_article_domain(art))
     return data
 
 

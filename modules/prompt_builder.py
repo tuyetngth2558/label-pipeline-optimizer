@@ -3,6 +3,8 @@ prompt_builder.py — Build prompt gửi Claude.
 """
 import os
 
+from modules.domain_registry import subdomain_hint_for_domain
+
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "prompt.md")
 RULE_PRELABEL_PATH = os.path.join(os.path.dirname(__file__), "..", "rule_prelabel.md")
 
@@ -50,11 +52,14 @@ def build_article_prompt(
     else:
         urls = all_urls[:8]
 
+    sub_hint = subdomain_hint_for_domain(d_key) if d_key and d_key != "?" else ""
     domain_hint = (
         f"Script tự detect domain: [{d_key}] {d_name}"
         + (f" | Sub-domain gợi ý: {subdomain}" if subdomain else "")
-        + "\n→ Xác nhận hoặc sửa lại trong JSON output"
+        + "\n→ Xác nhận hoặc sửa lại trong JSON output (sub_domain_id phải khớp bảng Vivipedia)"
     )
+    if sub_hint:
+        domain_hint += f"\n{sub_hint}"
 
     claim_lines = []
     claim_idx = 0

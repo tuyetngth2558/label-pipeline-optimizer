@@ -350,7 +350,7 @@ def run_annotation(system_prompt: str, article_prompt: str,
             raise RuntimeError("Claude chưa login — hãy login trong Chrome rồi chạy lại")
 
         # === STEP 1: System prompt ===
-        log_fn("Gửi system prompt (prompt.md)...")
+        log_fn("Gửi system prompt (rule_prelabel.md hoặc prompt.md)...")
         _send_text(claude_page, system_prompt, log_fn)
         _click_send(claude_page, log_fn)
 

@@ -194,6 +194,102 @@ def append_rows(rows: list[list], log_fn=print) -> str:
     return os.path.abspath(path)
 
 
+def _build_article_eval_header(ws):
+    ws.merge_cells("A1:N1")
+    _hdr(
+        ws["A1"],
+        "ARTICLE EVALUATION — Relevance & Completeness (1 dòng / bài)",
+        _NAVY,
+        size=11,
+    )
+    ws.row_dimensions[1].height = 18
+
+    labels = [
+        "#", "Tên bài viết", "URL bài", "Domain", "Sub-domain",
+        "Rel (0-1)", "Rel Band", "Nhận xét Relevance",
+        "Comp (0-1)", "Comp Band", "Nhận xét Completeness",
+        "Note", "Annotator ID", "Ngày",
+    ]
+    for col, label in enumerate(labels, 1):
+        fill = _BLUE if col in {6, 7, 8} else (_BLUE if col in {9, 10, 11} else _NAVY)
+        if col in {6, 7, 8, 9, 10, 11}:
+            fill = _BLUE
+        elif col in {12, 13, 14}:
+            fill = _GRAY
+        _hdr(ws.cell(row=3, column=col), label, fill, size=8)
+    ws.row_dimensions[3].height = 32
+    ws.freeze_panes = "A4"
+
+
+def _next_article_stt(ws) -> int:
+    for r in range(ws.max_row, 3, -1):
+        val = ws.cell(row=r, column=1).value
+        if val is not None:
+            try:
+                return int(val) + 1
+            except (TypeError, ValueError):
+                pass
+    return 1
+
+
+def append_article_evaluation(
+    article: dict,
+    annotator: str = "AUTO",
+    today: str | None = None,
+    article_url: str = "",
+    log_fn=print,
+) -> None:
+    """Ghi 1 dòng sheet Article Evaluation (Rel/Comp cấp bài)."""
+    from modules.scoring_utils import score_to_band
+
+    wb, path = get_or_create_workbook()
+    sheet_name = "Article Evaluation"
+    if sheet_name not in wb.sheetnames:
+        ws = wb.create_sheet(sheet_name)
+        _build_article_eval_header(ws)
+    else:
+        ws = wb[sheet_name]
+        if ws.max_row < 3:
+            _build_article_eval_header(ws)
+
+    today = today or date.today().strftime("%Y-%m-%d")
+    rel = article.get("rel", "")
+    comp = article.get("comp", "")
+    rel_band = article.get("rel_band") or score_to_band(rel)
+    comp_band = article.get("comp_band") or score_to_band(comp)
+
+    row = ws.max_row + 1
+    if row < 4:
+        row = 4
+    stt = _next_article_stt(ws)
+
+    values = [
+        stt,
+        article.get("title", ""),
+        article_url,
+        article.get("domain", ""),
+        article.get("sub_domain", ""),
+        rel,
+        rel_band,
+        article.get("rel_reason", ""),
+        comp,
+        comp_band,
+        article.get("comp_reason", ""),
+        "",
+        annotator,
+        today,
+    ]
+    for col, val in enumerate(values, 1):
+        _data(ws.cell(row=row, column=col), val, fill=_DATABG)
+    ws.row_dimensions[row].height = 80
+
+    try:
+        wb.save(path)
+    except PermissionError:
+        pass
+    log_fn(f"  Article Evaluation: Rel={rel} ({rel_band}) | Comp={comp} ({comp_band})")
+
+
 def write_output(stt: str, data: dict, log_fn=print) -> str:
     art = data.get("article", {})
     claims = data.get("claims", [])

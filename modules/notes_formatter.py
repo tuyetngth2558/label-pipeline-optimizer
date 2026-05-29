@@ -45,7 +45,12 @@ def format_notes(
     if risk is not None or risk_reason:
         _add("RISK", risk, risk_reason)
     txt_val = (txt or "OK").strip().upper()
-    _add("TXT", None, f"{txt_val}: {txt_reason}".strip(": ") if txt_reason else txt_val)
+    if txt_reason:
+        lines.append(f"TXT={txt_val}: {txt_reason}")
+    else:
+        lines.append(
+            f"TXT={txt_val}: Không có lỗi" if txt_val == "OK" else f"TXT={txt_val}:"
+        )
 
     return "\n".join(lines)
 
